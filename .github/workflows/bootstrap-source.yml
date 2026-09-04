@@ -46,7 +46,6 @@ jobs:
           base64 --decode /tmp/vaultsecure.b64 > /tmp/vaultsecure.tar.gz
           echo '422aca69b32b89e79dc8338a646a155da4abdc5343fcdb6ed565f826e7734143  /tmp/vaultsecure.tar.gz' | sha256sum -c -
           gzip -t /tmp/vaultsecure.tar.gz
-          tar -tzf /tmp/vaultsecure.tar.gz | head -100
 
       - name: Extract project safely
         shell: bash
@@ -72,8 +71,13 @@ jobs:
             -exec rm -rf {} +
 
           cp -a "$ROOT"/. .
+
+          mkdir -p .workflow-staging
+          cp .github/workflows/ci.yml .workflow-staging/ci.yml
+          cp .github/workflows/release.yml .workflow-staging/release.yml
+          cp .github/workflows/web.yml .workflow-staging/web.yml
+          rm -f .github/workflows/ci.yml .github/workflows/release.yml .github/workflows/web.yml
           rm -rf .bootstrap
-          rm -f .github/workflows/bootstrap-source.yml
 
       - name: Validate source tree
         shell: bash
@@ -84,18 +88,22 @@ jobs:
           test -d app
           test -d src
           test -f supabase/schema.sql
+          test -f .workflow-staging/ci.yml
+          test -f .workflow-staging/release.yml
+          test -f .workflow-staging/web.yml
           grep -qi 'vaultsecure' package.json
           if grep -RIl --exclude='.env.example' -E '(BEGIN (RSA|EC|OPENSSH) PRIVATE KEY|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk_live_[A-Za-z0-9]{16,}|sb_secret_[A-Za-z0-9_-]{16,})' .; then
             echo 'Potential committed secret detected.' >&2
             exit 1
           fi
 
-      - name: Commit full source
+      - name: Commit source without workflow mutations
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
+          git reset -- .github/workflows/bootstrap-source.yml
           git commit -m 'Add complete VaultSecure application source'
           git push origin HEAD:main
