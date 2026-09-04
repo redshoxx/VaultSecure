@@ -1,10 +1,10 @@
 import React from 'react';
 import { Redirect, Tabs } from 'expo-router';
-import { Text } from 'react-native';
+import { Text, type ColorValue } from 'react-native';
 import { useVault } from '@/src/state/vault-context';
 import { C } from '@/src/ui/theme';
 
-const icon = (symbol: string, color: string) => <Text style={{ color, fontSize: 20 }}>{symbol}</Text>;
+const icon = (symbol: string, color: ColorValue) => <Text style={{ color, fontSize: 20 }}>{symbol}</Text>;
 
 export default function TabsLayout() {
   const { status } = useVault();
