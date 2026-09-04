@@ -1,0 +1,84 @@
+{
+  "expo": {
+    "name": "VaultSecure",
+    "slug": "vaultsecure",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "vaultsecure",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#050A12"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "at.vaultsecure.app",
+      "buildNumber": "1",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": true,
+        "NSFaceIDUsageDescription": "VaultSecure verwendet Face ID, um deinen verschlüsselten Tresor lokal zu entsperren."
+      }
+    },
+    "android": {
+      "package": "at.vaultsecure.app",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#050A12"
+      },
+      "permissions": []
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-secure-store",
+        {
+          "configureAndroidBackup": true,
+          "faceIDPermission": "VaultSecure verwendet Face ID, um deinen verschlüsselten Tresor lokal zu entsperren."
+        }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "VaultSecure verwendet Face ID, um deinen verschlüsselten Tresor lokal zu entsperren."
+        }
+      ],
+      [
+        "expo-file-system",
+        {
+          "supportsOpeningDocumentsInPlace": true,
+          "enableFileSharing": true
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "VaultSecure benötigt die Kamera ausschließlich zum Scannen von 2FA-QR-Codes.",
+          "recordAudioAndroid": false,
+          "barcodeScannerEnabled": true
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "fallbackToCacheTimeout": 0,
+      "checkAutomatically": "ON_LOAD"
+    },
+    "extra": {
+      "router": {}
+    }
+  }
+}

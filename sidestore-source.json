@@ -1,0 +1,22 @@
+{
+  "name": "VaultSecure",
+  "subtitle": "Sicherer Passwort- und 2FA-Tresor",
+  "description": "Offizielle VaultSecure SideStore-Quelle.",
+  "iconURL": "https://raw.githubusercontent.com/redshoxx/VaultSecure/main/assets/icon.png",
+  "tintColor": "#238BFF",
+  "apps": [
+    {
+      "name": "VaultSecure",
+      "bundleIdentifier": "at.vaultsecure.app",
+      "developerName": "redshoxx",
+      "subtitle": "Passwörter, sichere Codes und 2FA in einem verschlüsselten Vault.",
+      "localizedDescription": "VaultSecure speichert Passwörter, Codes, sichere Notizen und TOTP-Secrets verschlüsselt. Backups enthalten ausschließlich den verschlüsselten Vault.",
+      "iconURL": "https://raw.githubusercontent.com/redshoxx/VaultSecure/main/assets/icon.png",
+      "tintColor": "#238BFF",
+      "category": "utilities",
+      "versions": [],
+      "appPermissions": {}
+    }
+  ],
+  "news": []
+}

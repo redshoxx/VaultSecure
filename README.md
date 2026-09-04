@@ -1,145 +1,183 @@
 # VaultSecure
 
-VaultSecure ist ein plattformübergreifender Passwort- und 2FA-Tresor für iOS, Android und Web. Die App ist so aufgebaut, dass sensible Daten **vor dem Speichern verschlüsselt** werden. Cloud-Backups enthalten ausschließlich die verschlüsselte Vault-Hülle.
+VaultSecure ist ein plattformübergreifender Passwort- und 2FA-Tresor für **iPhone/iPad**, **Android** und **Web**. Der Vault wird bereits auf dem Endgerät verschlüsselt; Backups und optionale Cloud-Sicherung enthalten ausschließlich den verschlüsselten Datencontainer.
 
-## Plattformen
+## Funktionen
 
-- **iOS**: Expo/EAS Build, SideStore/AltStore-kompatible IPA-Verteilung
-- **Android**: APK/AAB über EAS/GitHub Releases
-- **Web**: Expo Web, statisch exportierbar und z. B. über Vercel deploybar
-
-## Kernfunktionen
-
-- Passwörter, sichere Notizen und Recovery-Codes
-- integrierter TOTP-Authenticator
-- QR-Code-Import für TOTP
-- Passwortgenerator
+- Passwörter und Logins
+- Sichere Notizen, Recovery-Codes und sonstige Secrets
+- Integrierter TOTP-Authenticator mit QR-Scanner
+- TOTP SHA-1, SHA-256 und SHA-512, 6/8 Stellen, konfigurierbares Intervall
+- Kryptographisch sicherer Passwortgenerator
 - AES-256-GCM verschlüsselter Vault
-- Master-Passwort mit scrypt-basierter Schlüsselableitung
-- biometrische Schnellentsperrung über Secure Store/Keychain/Keystore
-- automatisches Sperren
-- Sperre beim Wechsel in den Hintergrund
-- Screenshot-/Screen-Recording-Schutz auf Mobilgeräten
-- verschlüsselte Backup-Dateien
-- Wiederherstellung auf einem neuen Gerät
-- fünf rotierende lokale verschlüsselte Recovery-Snapshots
-- optionales verschlüsseltes Supabase-Cloud-Backup
-- Expo OTA Updates für JS-/UI-Updates
-- GitHub Actions für CI, Web und Releases
-- SideStore-kompatible `sidestore-source.json`
+- scrypt-basierte Master-Passwort-KDF
+- Biometrisches Entsperren über iOS Keychain / Android Keystore
+- Screenshot-/Screen-Recording-Schutz und geschützte App-Switcher-Vorschau auf iOS/Android
+- Automatische Sperre bei Inaktivität; beim Wechsel in den Hintergrund wird sofort gesperrt
+- Zwischenablage wird nach konfigurierbarer Zeit geleert
+- Verschlüsselter Backup-Export und -Import
+- 5 rotierende lokale, weiterhin verschlüsselte Recovery-Snapshots
+- Optionales Zero-Knowledge-Cloud-Backup via Supabase + RLS
+- Web-Version mit demselben verschlüsselten Vault-Format
+- Expo Updates für OTA-JavaScript-Updates nach EAS-Konfiguration
+- GitHub Releases für IPA/APK/Web-Pakete
+- SideStore-kompatible AltSource (`sidestore-source.json`)
 
 ## Sicherheitsmodell
 
-Der Vault verwendet einen zufällig erzeugten Vault-Key. Dieser Schlüssel wird nicht dauerhaft im Klartext gespeichert. Er wird mit einem aus dem Master-Passwort abgeleiteten Schlüssel geschützt. Während einer entsperrten Sitzung existiert der entschlüsselte Vault-Key nur im Arbeitsspeicher.
+VaultSecure erzeugt beim Erstellen eines Tresors einen zufälligen 256-Bit-Vault-Key. Das Master-Passwort wird **nicht gespeichert**. Stattdessen wird daraus mit scrypt ein Key-Encryption-Key abgeleitet, der nur den Vault-Key verschlüsselt. Der eigentliche Vault wird mit AES-256-GCM verschlüsselt.
 
-Auf Mobilgeräten kann zusätzlich ein Geräteschlüssel im geschützten Betriebssystem-Keystore hinterlegt werden, um Face ID, Touch ID oder Android-Biometrie als Schnellentsperrung zu ermöglichen.
+```text
+Master-Passwort
+      │
+      ├─ scrypt + zufälliger Salt ──> KEK
+      │                              │
+      │                              └─ AES-256-GCM ──> verschlüsselter Vault-Key
+      │
+zufälliger Vault-Key ── AES-256-GCM ──> Passwörter / Notizen / TOTP-Secrets
+                                             │
+                                             ├─ lokaler verschlüsselter Vault
+                                             ├─ verschlüsselte Backup-Datei
+                                             └─ optional: verschlüsseltes Cloud-Backup
+```
 
-Cloud-Backups speichern ausschließlich das verschlüsselte Vault-Envelope. Der Server benötigt den Master-Key nicht und kann die Vault-Inhalte nicht entschlüsseln.
+Bei biometrischem Entsperren wird **nur der Vault-Key** im systemgeschützten Secure Store gespeichert und durch Face ID/Touch ID/Biometrie geschützt. Der Vault-Key befindet sich im entsperrten Zustand zusätzlich im Arbeitsspeicher und wird beim Sperren aus dem React-State entfernt.
 
 Weitere Details: [`docs/SECURITY-ARCHITECTURE.md`](docs/SECURITY-ARCHITECTURE.md)
 
-## Lokale Entwicklung
-
-Voraussetzungen:
+## Voraussetzungen
 
 - Node.js 22+
 - npm
-- Expo/EAS Account für native Builds
+- Expo / EAS Account nur für EAS Build bzw. Expo Updates
+- Für die iOS-IPA-Erstellung über GitHub Actions: kein lokaler Mac erforderlich
+- SideStore auf dem iPhone für die Installation der IPA
+
+## Lokal starten
 
 ```bash
 npm install
 npm run start
 ```
 
-Danach kann die App mit Expo Go bzw. einem Development Build getestet werden.
-
-### Web
+Web:
 
 ```bash
 npm run web
 ```
 
-Produktions-Export:
+Android über Expo Go während der Entwicklung:
 
 ```bash
-npx expo export -p web
+npm run android
 ```
 
-## Konfiguration
+> Face ID ist in Expo Go eingeschränkt. Für den vollständigen biometrischen Test eine eigene Development-/Release-Build verwenden.
 
-Kopiere `.env.example` nach `.env.local` und trage nur die benötigten öffentlichen Client-Konfigurationen ein:
+## Cloud-Backup mit Supabase
 
-```bash
-cp .env.example .env.local
-```
-
-### Supabase
-
-Cloud-Backup ist optional. Ohne Supabase arbeitet VaultSecure vollständig lokal.
-
-Für Cloud-Backup:
+Cloud ist optional. Ohne Supabase funktioniert VaultSecure vollständig lokal inklusive Backup-Dateien.
 
 1. Supabase-Projekt anlegen.
-2. `supabase/schema.sql` ausführen.
-3. Publishable Key und Project URL eintragen.
-4. E-Mail/Passwort-Auth im Supabase-Projekt aktivieren.
+2. In Supabase SQL Editor den Inhalt von `supabase/schema.sql` ausführen.
+3. `.env.example` nach `.env` kopieren.
+4. Projekt-URL und **Publishable Key** eintragen.
+
+```env
+EXPO_PUBLIC_SUPABASE_URL=https://DEIN_PROJEKT.supabase.co
+EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
+EXPO_PUBLIC_GITHUB_OWNER=DEIN_GITHUB_NAME
+EXPO_PUBLIC_GITHUB_REPO=VaultSecure
+```
 
 **Keinen `service_role`-/Secret-Key in die App eintragen.** Die mitgelieferten RLS-Regeln beschränken jeden Account auf die eigene `user_id`.
 
-## Builds
+Cloud-Backup ist bewusst kein Klartext-Sync: Supabase erhält nur das bereits clientseitig verschlüsselte `VaultEnvelope`.
 
-### Android APK
+## Automatische OTA-Updates
 
-```bash
-npx eas-cli@latest build -p android --profile preview
-```
-
-### iOS IPA
-
-Für eine SideStore-/AltStore-verwendbare IPA muss ein gültiger iOS-Build signiert werden. Apple-/Expo-Credentials werden **nicht** im Repository gespeichert.
+Für JavaScript-/UI-Updates nutzt das Projekt `expo-updates`. Einmalig:
 
 ```bash
-npx eas-cli@latest build -p ios --profile preview
+npx eas-cli@latest login
+npx eas-cli@latest init
+npx eas-cli@latest update:configure
 ```
 
-### Produktionsbuilds
+Danach kann ein kompatibles Update veröffentlicht werden:
 
 ```bash
-npx eas-cli@latest build --profile production
+npx eas-cli@latest update --channel production --message "VaultSecure Update"
 ```
 
-## SideStore
+`runtimeVersion` ist auf die App-Version gekoppelt. Änderungen an nativen Modulen, Berechtigungen oder nativer Konfiguration benötigen daher eine neue IPA/APK-Version.
 
-Die Datei [`sidestore-source.json`](sidestore-source.json) ist als AltSource vorbereitet. Das Script
+## Android APK + GitHub Releases
+
+Einmalig EAS konfigurieren und einen Expo Access Token als GitHub Secret `EXPO_TOKEN` hinterlegen. Danach erzeugt ein Git-Tag automatisch das signierte APK zusammen mit IPA und Web-ZIP:
 
 ```bash
-npm run update-source
+git tag v1.0.0
+git push origin v1.0.0
 ```
 
-kann Release-Daten aus GitHub-Umgebungsvariablen in die Source-Datei übernehmen.
+Die Release-Pipeline liegt in `.github/workflows/release.yml`.
 
-Für echte automatische SideStore-Updates muss jede neue IPA-Version als GitHub Release verfügbar sein und anschließend in der Source-Datei referenziert werden.
+Für Android-Updates muss über alle Versionen dieselbe Signatur verwendet werden. EAS Credentials übernimmt diese Aufgabe. Android verlangt bei APK-Installationen außerhalb des Play Stores weiterhin die vom Betriebssystem vorgesehene Benutzerbestätigung.
 
-## Android Updates
+## iPhone / SideStore
 
-VaultSecure kann GitHub Releases auf neue App-Versionen prüfen. Ein neues APK kann heruntergeladen werden. Die eigentliche APK-Installation muss bei normalem Android aus Sicherheitsgründen vom Benutzer bestätigt werden.
+Der Release-Workflow erzeugt auf einem macOS-GitHub-Runner eine **unsigned IPA**. SideStore signiert sie bei der Installation mit den für SideStore verfügbaren Benutzer-Credentials neu.
 
-## Expo OTA Updates
+Nach dem ersten Release wird `sidestore-source.json` automatisch um die neue Version erweitert. Die Source-URL lautet dann:
 
-JS-/UI-Änderungen können über Expo Updates verteilt werden, sofern das Expo-Projekt mit EAS initialisiert und der Update-Kanal konfiguriert wurde.
+```text
+https://raw.githubusercontent.com/DEIN_GITHUB_NAME/VaultSecure/main/sidestore-source.json
+```
 
-Native Änderungen benötigen weiterhin einen neuen IPA-/APK-Build.
+Oder als SideStore-Deep-Link:
 
-## GitHub Actions
+```text
+sidestore://source?url=https://raw.githubusercontent.com/DEIN_GITHUB_NAME/VaultSecure/main/sidestore-source.json
+```
 
-- `.github/workflows/ci.yml`: statische Prüfung
-- `.github/workflows/web.yml`: Web-Export
-- `.github/workflows/release.yml`: Release-Build-Pipeline
+SideStore kann dadurch neue IPA-Versionen als Updates erkennen. iOS kontrolliert jedoch weiterhin Signierung, Refresh und Installation; eine beliebige vollständig stille Selbstinstallation durch die App ist nicht vorgesehen.
 
-Für EAS-Builds muss im GitHub Repository ein Secret namens `EXPO_TOKEN` eingerichtet werden.
+## Web-Version
 
-## Wichtiger Hinweis
+Statischer Export:
 
-VaultSecure ist sicherheitskritische Software. Vor einer produktiven Nutzung als einziger Speicher für geschäftskritische oder unwiederbringliche Zugangsdaten sollte ein unabhängiger Security Audit durchgeführt werden.
+```bash
+npm run export:web
+```
 
-Backups sollten mindestens an zwei voneinander unabhängigen Orten gespeichert werden. Keine Software kann garantieren, dass Daten unter allen denkbaren Hardware-, Benutzer- und Infrastrukturfehlern niemals verloren gehen.
+Ausgabe: `dist/`
+
+`vercel.json` ist bereits enthalten. Auf Vercel dieselben `EXPO_PUBLIC_*` Variablen konfigurieren. Die Web-Version sollte ausschließlich über HTTPS betrieben werden, da der Browser-Kryptografie-Stack eine sichere Umgebung voraussetzt.
+
+## GitHub neu anlegen
+
+Dieses Paket ist bereits als Git-Repository vorbereitet. Nach dem Erstellen eines leeren GitHub-Repositories:
+
+```bash
+git remote add origin https://github.com/DEIN_GITHUB_NAME/VaultSecure.git
+git branch -M main
+git push -u origin main
+```
+
+Danach in GitHub unter **Settings → Secrets and variables → Actions** `EXPO_TOKEN` eintragen, falls automatisierte signierte Android-Releases gewünscht sind.
+
+## Backup-Empfehlung
+
+Kein System kann technisch garantieren, dass Daten unter allen Umständen niemals verloren gehen. Für einen Passwort-Tresor sollte mindestens gelten:
+
+1. lokaler verschlüsselter Vault,
+2. aktiviertes verschlüsseltes Cloud-Backup **oder** regelmäßig exportierte `.vaultsecure`-Datei,
+3. eine zweite Kopie der Backup-Datei auf einem anderen Gerät/Datenträger,
+4. Master-Passwort getrennt und sicher aufbewahren.
+
+Eine Backup-Datei kann ohne das dazugehörige Master-Passwort nicht entschlüsselt werden.
+
+## Wichtiger Produktionshinweis
+
+Der Code ist als vollständige, funktionsfähige Implementierung aufgebaut, aber ein Passwortmanager ist Hochrisiko-Software. Vor dem Einsatz als alleiniger Tresor für geschäftskritische oder irreversible Zugangsdaten sollte ein unabhängiges Security-Audit inklusive Dependency-, Mobile-, Web- und Kryptografie-Review durchgeführt werden. Siehe [`SECURITY.md`](SECURITY.md).

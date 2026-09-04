@@ -1,0 +1,131 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: if [ -f package-lock.json ]; then npm ci; else npm install; fi
+      - run: npx expo export --platform web
+      - run: cd dist && zip -r ../VaultSecure-web.zip .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web
+          path: VaultSecure-web.zip
+
+  ios-unsigned-ipa:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: if [ -f package-lock.json ]; then npm ci; else npm install; fi
+      - run: npx expo prebuild --platform ios --clean --no-install
+      - name: Install CocoaPods
+        run: cd ios && pod install --repo-update
+      - name: Build unsigned iOS app
+        run: |
+          set -euo pipefail
+          SCHEME=$(xcodebuild -workspace ios/VaultSecure.xcworkspace -list -json | python3 -c 'import json,sys; d=json.load(sys.stdin); schemes=d["workspace"]["schemes"]; print(next((x for x in schemes if not x.startswith("Pods-")), schemes[0]))')
+          xcodebuild \
+            -workspace ios/VaultSecure.xcworkspace \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath ios/build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
+          APP=$(find ios/build/Build/Products/Release-iphoneos -maxdepth 1 -name '*.app' -print -quit)
+          test -n "$APP"
+          mkdir -p Payload
+          cp -R "$APP" Payload/
+          zip -r VaultSecure.ipa Payload
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios
+          path: VaultSecure.ipa
+
+  android-apk:
+    runs-on: ubuntu-latest
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: if [ -f package-lock.json ]; then npm ci; else npm install; fi
+      - name: Build signed APK with EAS
+        if: ${{ env.EXPO_TOKEN != '' }}
+        run: |
+          npx eas-cli@latest build --platform android --profile preview --non-interactive --wait --json > eas-build.json
+          node -e "const f=require('./eas-build.json'); const b=Array.isArray(f)?f[0]:f; const u=b?.artifacts?.buildUrl; if(!u) process.exit(2); require('fs').writeFileSync('apk-url.txt',u)"
+          curl -L "$(cat apk-url.txt)" -o VaultSecure.apk
+      - name: Require EXPO_TOKEN
+        if: ${{ env.EXPO_TOKEN == '' }}
+        run: |
+          echo 'Missing GitHub secret EXPO_TOKEN. Configure it once for signed Android release builds.' >&2
+          exit 1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: VaultSecure.apk
+
+  publish:
+    needs: [web, ios-unsigned-ipa, android-apk]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+      - name: Flatten release artifacts
+        run: |
+          cp release-artifacts/ios/VaultSecure.ipa .
+          cp release-artifacts/android/VaultSecure.apk .
+          cp release-artifacts/web/VaultSecure-web.zip .
+      - name: Update SideStore source
+        env:
+          RELEASE_VERSION: ${{ github.ref_name }}
+        run: |
+          export IPA_SIZE=$(stat -c%s VaultSecure.ipa)
+          node scripts/update-source.mjs
+      - name: Commit SideStore source
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add sidestore-source.json
+          git diff --cached --quiet || git commit -m "chore: update SideStore source for ${{ github.ref_name }}"
+          git push origin HEAD:main
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            VaultSecure.ipa \
+            VaultSecure.apk \
+            VaultSecure-web.zip \
+            --generate-notes \
+            --title "VaultSecure ${GITHUB_REF_NAME}"
