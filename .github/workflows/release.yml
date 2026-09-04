@@ -16,7 +16,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
       - run: if [ -f package-lock.json ]; then npm ci; else npm install; fi
       - run: npx expo export --platform web
       - run: cd dist && zip -r ../VaultSecure-web.zip .
@@ -32,7 +31,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
       - run: if [ -f package-lock.json ]; then npm ci; else npm install; fi
       - run: npx expo prebuild --platform ios --clean --no-install
       - name: Install CocoaPods
@@ -70,7 +68,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
       - run: if [ -f package-lock.json ]; then npm ci; else npm install; fi
       - name: Build signed APK with EAS
         if: ${{ env.EXPO_TOKEN != '' }}
