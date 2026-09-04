@@ -6,20 +6,92 @@ import {
   getRandomBytesAsync,
 } from 'expo-crypto';
 import { scryptAsync } from '@noble/hashes/scrypt.js';
-import { utf8ToBytes, bytesToUtf8 } from '@noble/hashes/utils.js';
+import { utf8ToBytes } from '@noble/hashes/utils.js';
 import { base64ToBytes, bytesToBase64 } from './base64';
 import type { VaultData, VaultEnvelope } from '@/src/types/vault';
 
-const KDF = { N: 32768, r: 8, p: 1, dkLen: 32 } as const;
+type ScryptParams = {
+  N: number;
+  r: number;
+  p: number;
+  dkLen: number;
+};
+
+const KDF: ScryptParams = { N: 32768, r: 8, p: 1, dkLen: 32 };
 const MAX_ENVELOPE_BYTES = 25 * 1024 * 1024;
 
 function asAesKey(value: unknown): AESEncryptionKey {
   return value as AESEncryptionKey;
 }
 
-async function deriveKey(password: string, salt: Uint8Array, params = KDF): Promise<AESEncryptionKey> {
+function assertWellFormedUtf16(value: string): void {
+  for (let i = 0; i < value.length; i += 1) {
+    const code = value.charCodeAt(i);
+    if (code >= 0xd800 && code <= 0xdbff) {
+      const next = value.charCodeAt(i + 1);
+      if (!(next >= 0xdc00 && next <= 0xdfff)) throw new Error('Text enthält ungültige Unicode-Zeichen.');
+      i += 1;
+    } else if (code >= 0xdc00 && code <= 0xdfff) {
+      throw new Error('Text enthält ungültige Unicode-Zeichen.');
+    }
+  }
+}
+
+function bytesToUtf8Strict(bytes: Uint8Array): string {
+  let out = '';
+  for (let i = 0; i < bytes.length; ) {
+    const b0 = bytes[i]!;
+    let codePoint: number;
+    let width: number;
+
+    if (b0 <= 0x7f) {
+      codePoint = b0;
+      width = 1;
+    } else if (b0 >= 0xc2 && b0 <= 0xdf) {
+      const b1 = bytes[i + 1];
+      if (b1 === undefined || (b1 & 0xc0) !== 0x80) throw new Error('Ungültige UTF-8-Daten.');
+      codePoint = ((b0 & 0x1f) << 6) | (b1 & 0x3f);
+      width = 2;
+    } else if (b0 >= 0xe0 && b0 <= 0xef) {
+      const b1 = bytes[i + 1];
+      const b2 = bytes[i + 2];
+      if (b1 === undefined || b2 === undefined || (b1 & 0xc0) !== 0x80 || (b2 & 0xc0) !== 0x80) {
+        throw new Error('Ungültige UTF-8-Daten.');
+      }
+      if ((b0 === 0xe0 && b1 < 0xa0) || (b0 === 0xed && b1 >= 0xa0)) throw new Error('Ungültige UTF-8-Daten.');
+      codePoint = ((b0 & 0x0f) << 12) | ((b1 & 0x3f) << 6) | (b2 & 0x3f);
+      width = 3;
+    } else if (b0 >= 0xf0 && b0 <= 0xf4) {
+      const b1 = bytes[i + 1];
+      const b2 = bytes[i + 2];
+      const b3 = bytes[i + 3];
+      if (
+        b1 === undefined ||
+        b2 === undefined ||
+        b3 === undefined ||
+        (b1 & 0xc0) !== 0x80 ||
+        (b2 & 0xc0) !== 0x80 ||
+        (b3 & 0xc0) !== 0x80
+      ) {
+        throw new Error('Ungültige UTF-8-Daten.');
+      }
+      if ((b0 === 0xf0 && b1 < 0x90) || (b0 === 0xf4 && b1 >= 0x90)) throw new Error('Ungültige UTF-8-Daten.');
+      codePoint = ((b0 & 0x07) << 18) | ((b1 & 0x3f) << 12) | ((b2 & 0x3f) << 6) | (b3 & 0x3f);
+      width = 4;
+    } else {
+      throw new Error('Ungültige UTF-8-Daten.');
+    }
+
+    out += String.fromCodePoint(codePoint);
+    i += width;
+  }
+  return out;
+}
+
+async function deriveKey(password: string, salt: Uint8Array, params: ScryptParams = KDF): Promise<AESEncryptionKey> {
   if (password.length < 10) throw new Error('Das Master-Passwort muss mindestens 10 Zeichen haben.');
   if (password.length > 1024) throw new Error('Das Master-Passwort ist zu lang.');
+  assertWellFormedUtf16(password);
   const bytes = await scryptAsync(utf8ToBytes(password), salt, params);
   return asAesKey(await AESEncryptionKey.import(bytes));
 }
@@ -77,7 +149,7 @@ export async function unlockEnvelope(password: string, envelope: VaultEnvelope):
     const vaultKeyBytes = await decryptBytes(envelope.wrappedKey, kek);
     const vaultKey = asAesKey(await AESEncryptionKey.import(vaultKeyBytes));
     const plain = await decryptBytes(envelope.vaultCiphertext, vaultKey);
-    const data = JSON.parse(bytesToUtf8(plain)) as unknown;
+    const data = JSON.parse(bytesToUtf8Strict(plain)) as unknown;
     validateVaultData(data);
     return { data, vaultKeyBase64: await vaultKey.encoded('base64') };
   } catch {
@@ -89,7 +161,7 @@ export async function decryptWithVaultKey(vaultKeyBase64: string, envelope: Vaul
   validateEnvelope(envelope);
   const key = asAesKey(await AESEncryptionKey.import(vaultKeyBase64, 'base64'));
   const plain = await decryptBytes(envelope.vaultCiphertext, key);
-  const data = JSON.parse(bytesToUtf8(plain)) as unknown;
+  const data = JSON.parse(bytesToUtf8Strict(plain)) as unknown;
   validateVaultData(data);
   return data;
 }
