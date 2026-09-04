@@ -84,7 +84,7 @@ jobs:
           test -d app
           test -d src
           test -f supabase/schema.sql
-          grep -q 'VaultSecure' package.json
+          grep -qi 'vaultsecure' package.json
           if grep -RIl --exclude='.env.example' -E '(BEGIN (RSA|EC|OPENSSH) PRIVATE KEY|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk_live_[A-Za-z0-9]{16,}|sb_secret_[A-Za-z0-9_-]{16,})' .; then
             echo 'Potential committed secret detected.' >&2
             exit 1
